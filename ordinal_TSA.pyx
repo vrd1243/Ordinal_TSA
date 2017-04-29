@@ -9,6 +9,9 @@ from libc.stdlib cimport qsort
 import sys
 import bottleneck as bn
 #cdef inline double max(double a, double b): return a if a >= b else b
+from numpy import linalg as LA
+cimport scipy as sp
+from scipy import spatial
 
 
 cdef extern from "math.h":
@@ -76,6 +79,7 @@ cdef _get_patterns_cython(
                 for k in range(0, dim):
                     var += (v[k] - ave)**2
                 var /= dim
+# The weights are the variances across all the dimensions of an embedded point.
                 weights[t-start, n] = var
             else:
                 weights[t-start, n] =1.0
@@ -179,11 +183,71 @@ cdef  ordinal_patt_array(double[:, :] data, int[:, :] data_mask, int dim = 2, in
     #else:
     #    return (patt, patt_mask, patt_time)
 
+@cython.cdivision(True)
+def embed_array(double[:,:] data, long dim, int step=1):
+    
+    length = data.shape[0]; 
+    ea = data[0:length - step*(dim-1)];
+    for j in range(2,dim+1):
+        ea = np.concatenate((ea, data[(j-1)*step:length-step*(dim-j)]), axis=1);
+    return ea; 
+
+@cython.cdivision(True)
+def nearest_neighbor_predict(double[:] prev, double[:,:] data, int k):
+    
+    length = data.shape[0];
+    # Get the distance array for the given point with every other point in the  
+    # embedded series. 
+    distance = np.asarray(map(lambda x: LA.norm(x-np.asarray(prev)), 
+    			  np.asarray(data[:length - 1,:])), np.double);
+    
+    # Get the sorted array of the indices with the minimum distances first. 
+    min_k_idx = np.argpartition(distance, k);		
+    
+    # Get the first k mininum indices, and get the next in the series for each of those.
+    mink_next = np.asarray(data)[min_k_idx[:k]+1,:];	
+    
+    # Return the mean
+    return np.mean(mink_next, axis=0);
+
+@cython.cdivision(True)
+def compute_mase(double[:] data, double[:] pred, double[:] ref):
+    
+    pred_np = np.asarray(pred);
+    data_np = np.asarray(data);
+    ref_np  = np.asarray(ref);
+
+    length = len(data_np);
+
+    return np.sum(np.abs(pred_np - ref_np)) / np.sum(np.abs(data_np[1:length] - data_np[:length-1]));
+
+@cython.cdivision(True)
+def k_ball_lma(double[:,:] data, double[:] prev, int test_size):
+# Generate predictions starting from N+1 index in the time series 
+# until the entire length. For each prediction data_i+1, we look at
+# k closest embedded numbers of data_i, progress each of them to the 
+# next point and average them out to get data_i+1. Return the prediction
+# array by getting the first index of data_i+1 for the predicted embedded
+# points.
+	
+    data_len = data.shape[0];
+    dim  = data.shape[1];
+	
+    pred_array = np.zeros(test_size);
+    	
+    for i in range(0, test_size):
+        next_pred = nearest_neighbor_predict(prev, data, 10);
+        print next_pred;
+        pred_array[i] = next_pred[0];
+        prev = next_pred;
+
+    return pred_array;
 
 @cython.cdivision(True)
 def permutation_entropy(double[:,:] data, long dim,int step =1, int w=0):
     cdef int ii, kk, ll
     cdef int T,N
+    # Set the number of samples and the total dimensions 
     T = data.shape[0]
     N = data.shape[1]
     cdef int patt_time = T - step * (dim - 1)
