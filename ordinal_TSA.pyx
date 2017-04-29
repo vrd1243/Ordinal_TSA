@@ -10,9 +10,8 @@ import sys
 import bottleneck as bn
 #cdef inline double max(double a, double b): return a if a >= b else b
 from numpy import linalg as LA
-cimport scipy as sp
-from scipy import spatial
-
+import sklearn
+from sklearn.neighbors import NearestNeighbors
 
 cdef extern from "math.h":
     double log(double)
@@ -193,22 +192,14 @@ def embed_array(double[:,:] data, long dim, int step=1):
     return ea; 
 
 @cython.cdivision(True)
-def nearest_neighbor_predict(double[:] prev, double[:,:] data, int k):
+def nearest_neighbor_predict(double[:] prev, double[:,:] data, int k, nbrs):
     
-    length = data.shape[0];
-    # Get the distance array for the given point with every other point in the  
-    # embedded series. 
-    distance = np.asarray(map(lambda x: LA.norm(x-np.asarray(prev)), 
-    			  np.asarray(data[:length - 1,:])), np.double);
-    
-    # Get the sorted array of the indices with the minimum distances first. 
-    min_k_idx = np.argpartition(distance, k);		
-    
-    # Get the first k mininum indices, and get the next in the series for each of those.
-    mink_next = np.asarray(data)[min_k_idx[:k]+1,:];	
-    
-    # Return the mean
-    return np.mean(mink_next, axis=0);
+    indices = nbrs.kneighbors(np.asarray(prev))[1] + 1;   
+    mink_next = np.asarray(data)[indices];
+    mean = np.mean(np.mean(mink_next, axis=0), axis=0);
+
+    return mean;
+
 
 @cython.cdivision(True)
 def compute_mase(double[:] data, double[:] pred, double[:] ref):
@@ -235,9 +226,13 @@ def k_ball_lma(double[:,:] data, double[:] prev, int test_size):
 	
     pred_array = np.zeros(test_size);
     	
+    nbrs = NearestNeighbors(n_neighbors=10, algorithm='ball_tree').fit(np.asarray(data[:-1]));
+    
     for i in range(0, test_size):
-        next_pred = nearest_neighbor_predict(prev, data, 10);
-        print next_pred;
+        next_pred = nearest_neighbor_predict(prev, data, 10, nbrs);
+        #indices = nbrs.kneighbors(np.asarray(prev))[1] + 1;
+        #mink_next = np.asarray(data)[indices];
+        #next_pred = np.mean(np.mean(mink_next, axis=0), axis=0);
         pred_array[i] = next_pred[0];
         prev = next_pred;
 
