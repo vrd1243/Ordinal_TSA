@@ -195,18 +195,8 @@ def embed_array(double[:,:] data, long dim, int step=1):
 def nearest_neighbor_predict(double[:] prev, double[:,:] data, int k, nbrs):
     
     indices = nbrs.kneighbors(np.asarray(prev))[1] + 1;   
-    mink      = np.asarray(data)[indices - 1];
     mink_next = np.asarray(data)[indices];
     mean = np.mean(np.mean(mink_next, axis=0), axis=0);
-    print "============"
-    print "Current point "
-    print np.asarray(prev);
-    print "Nearest neighbors" 
-    print mink;
-    print "Next vector "
-    print mink_next;
-    print "Mean "
-    print  mean;
 
     return mean;
 
