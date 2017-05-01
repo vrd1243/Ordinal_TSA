@@ -195,25 +195,34 @@ def embed_array(double[:,:] data, long dim, int step=1):
 def nearest_neighbor_predict(double[:] prev, double[:,:] data, int k, nbrs):
     
     indices = nbrs.kneighbors(np.asarray(prev))[1] + 1;   
+    mink      = np.asarray(data)[indices - 1];
     mink_next = np.asarray(data)[indices];
     mean = np.mean(np.mean(mink_next, axis=0), axis=0);
+    print "============"
+    print "Current point "
+    print np.asarray(prev);
+    print "Nearest neighbors" 
+    print mink;
+    print "Next vector "
+    print mink_next;
+    print "Mean "
+    print  mean;
 
     return mean;
 
 
 @cython.cdivision(True)
-def compute_mase(double[:] data, double[:] pred, double[:] ref):
+def compute_mase(double[:] data, double[:] pred, double[:] ref, int test_size):
     
     pred_np = np.asarray(pred);
     data_np = np.asarray(data);
     ref_np  = np.asarray(ref);
 
     length = len(data_np);
-
-    return np.sum(np.abs(pred_np - ref_np)) / np.sum(np.abs(data_np[1:length] - data_np[:length-1]));
+    return (length - 1) / test_size * np.sum(np.abs(pred_np - ref_np)) / np.sum(np.abs(data_np[1:length] - data_np[:length-1]));
 
 @cython.cdivision(True)
-def k_ball_lma(double[:,:] data, double[:] prev, int test_size):
+def k_ball_lma(double[:,:] data, double[:] prev, int test_size, int k):
 # Generate predictions starting from N+1 index in the time series 
 # until the entire length. For each prediction data_i+1, we look at
 # k closest embedded numbers of data_i, progress each of them to the 
@@ -226,10 +235,10 @@ def k_ball_lma(double[:,:] data, double[:] prev, int test_size):
 	
     pred_array = np.zeros(test_size);
     	
-    nbrs = NearestNeighbors(n_neighbors=10, algorithm='ball_tree').fit(np.asarray(data[:-1]));
+    nbrs = NearestNeighbors(n_neighbors=k, algorithm='ball_tree').fit(np.asarray(data[:-1]));
     
     for i in range(0, test_size):
-        next_pred = nearest_neighbor_predict(prev, data, 10, nbrs);
+        next_pred = nearest_neighbor_predict(prev, data, k, nbrs);
         #indices = nbrs.kneighbors(np.asarray(prev))[1] + 1;
         #mink_next = np.asarray(data)[indices];
         #next_pred = np.mean(np.mean(mink_next, axis=0), axis=0);
