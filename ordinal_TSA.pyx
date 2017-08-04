@@ -183,13 +183,16 @@ cdef  ordinal_patt_array(double[:, :] data, int[:, :] data_mask, int dim = 2, in
     #    return (patt, patt_mask, patt_time)
 
 @cython.cdivision(True)
-def embed_array(double[:,:] data, long dim, int step=1):
+def embed_array(double[:] data, long dim, int step=1):
     
     length = data.shape[0]; 
-    ea = data[0:length - step*(dim-1)];
-    for j in range(2,dim+1):
-        ea = np.concatenate((ea, data[(j-1)*step:length-step*(dim-j)]), axis=1);
-    return ea; 
+    
+    ea = [data[(dim-1)*step:length]];
+    for j in range(2, dim+1): 
+        ea = np.concatenate((ea, [data[(dim-j)*step:length - (j-1)*step]]))
+    
+    return np.transpose(ea);
+ 
 
 @cython.cdivision(True)
 def nearest_neighbor_predict(double[:] prev, double[:,:] data, int k, nbrs):
@@ -212,28 +215,28 @@ def compute_mase(double[:] data, double[:] pred, double[:] ref, int test_size):
     return (length - 1) / test_size * np.sum(np.abs(pred_np - ref_np)) / np.sum(np.abs(data_np[1:length] - data_np[:length-1]));
 
 @cython.cdivision(True)
-def k_ball_lma(double[:,:] data, double[:] prev, int test_size, int k):
+def k_ball_lma(double[:] data, double[:,:] ea, int step, int test_size, int k):
 # Generate predictions starting from N+1 index in the time series 
-# until the entire length. For each prediction data_i+1, we look at
-# k closest embedded numbers of data_i, progress each of them to the 
-# next point and average them out to get data_i+1. Return the prediction
-# array by getting the first index of data_i+1 for the predicted embedded
+# until the entire length. For each prediction ea_i+1, we look at
+# k closest embedded numbers of ea_i, progress each of them to the 
+# next point and average them out to get ea_i+1. Return the prediction
+# array by getting the first index of ea_i+1 for the predicted embedded
 # points.
 	
-    data_len = data.shape[0];
-    dim  = data.shape[1];
-	
     pred_array = np.zeros(test_size);
-    	
-    nbrs = NearestNeighbors(n_neighbors=k, algorithm='ball_tree').fit(np.asarray(data[:-1]));
     
+    ea_dim = ea.shape[1];
+    length = data.shape[0];
+    next_pred = ea[-1,:];
+    nbrs = NearestNeighbors(n_neighbors=k, algorithm='ball_tree').fit(np.asarray(ea));
+
     for i in range(0, test_size):
-        next_pred = nearest_neighbor_predict(prev, data, k, nbrs);
-        #indices = nbrs.kneighbors(np.asarray(prev))[1] + 1;
-        #mink_next = np.asarray(data)[indices];
-        #next_pred = np.mean(np.mean(mink_next, axis=0), axis=0);
+        next_pred = nearest_neighbor_predict(next_pred, ea, k, nbrs, cur_idx);
         pred_array[i] = next_pred[0];
-        prev = next_pred;
+        
+        #start = length - test_size + i;
+        #stop  = start - (ea_dim)* step;
+        #ea = np.concatenate((ea, [data[start:stop:-step]]));
 
     return pred_array;
 
