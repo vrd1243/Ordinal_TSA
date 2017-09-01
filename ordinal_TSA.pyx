@@ -195,12 +195,11 @@ def embed_array(double[:] data, long dim, int step=1):
  
 
 @cython.cdivision(True)
-def nearest_neighbor_predict(double[:] prev, double[:,:] data, int k, nbrs):
+def nearest_neighbor_predict(double[:] prev, double[:,:] data, int k, nbrs, cur_idx):
     
-    indices = nbrs.kneighbors(np.asarray(prev))[1] + 1;   
-    mink_next = np.asarray(data)[indices];
-    mean = np.mean(np.mean(mink_next, axis=0), axis=0);
-
+    indices = (nbrs.kneighbors(np.asarray(prev))[1] + 1)[0];   
+    mink_next = np.asarray(data)[indices,:];
+    mean = np.mean(mink_next, axis=0);
     return mean;
 
 
@@ -212,10 +211,10 @@ def compute_mase(double[:] data, double[:] pred, double[:] ref, int test_size):
     ref_np  = np.asarray(ref);
 
     length = len(data_np);
-    return (length - 1) / test_size * np.sum(np.abs(pred_np - ref_np)) / np.sum(np.abs(data_np[1:length] - data_np[:length-1]));
+    return (length - 1) / test_size * np.sum(np.abs(pred_np - ref_np)) / (np.sum(np.abs(data_np[1:length] - data_np[:length-1])));
 
 @cython.cdivision(True)
-def k_ball_lma(double[:] data, double[:,:] ea, int step, int test_size, int k):
+def k_ball_lma(double[:] data, double[:,:] ea, int step, int test_size, int k, int theiler_window=30):
 # Generate predictions starting from N+1 index in the time series 
 # until the entire length. For each prediction ea_i+1, we look at
 # k closest embedded numbers of ea_i, progress each of them to the 
@@ -227,17 +226,19 @@ def k_ball_lma(double[:] data, double[:,:] ea, int step, int test_size, int k):
     
     ea_dim = ea.shape[1];
     length = data.shape[0];
-    next_pred = ea[-1,:];
-    nbrs = NearestNeighbors(n_neighbors=k, algorithm='ball_tree').fit(np.asarray(ea));
+    start_idx = ea.shape[0] - (test_size + 1);
+    next_pred = ea[start_idx,:];
+    
+    # We are ignoring the last few elements while computing the nearest neighbors. Hence the theiler window. 
+    nbrs = NearestNeighbors(n_neighbors=k, algorithm='ball_tree').fit(np.asarray(ea[:-test_size-theiler_window,:]));
+    cur_idx = ea.shape[0] - test_size - 1;
 
     for i in range(0, test_size):
         next_pred = nearest_neighbor_predict(next_pred, ea, k, nbrs, cur_idx);
+        cur_idx = cur_idx + 1;
         pred_array[i] = next_pred[0];
+        next_pred = ea[cur_idx,:]; 
         
-        #start = length - test_size + i;
-        #stop  = start - (ea_dim)* step;
-        #ea = np.concatenate((ea, [data[start:stop:-step]]));
-
     return pred_array;
 
 @cython.cdivision(True)
