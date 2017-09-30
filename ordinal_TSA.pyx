@@ -197,7 +197,7 @@ def embed_array(double[:] data, long dim, int step=1):
 @cython.cdivision(True)
 def nearest_neighbor_predict(double[:] prev, double[:,:] data, int k, nbrs, cur_idx):
     
-    indices = (nbrs.kneighbors(np.asarray(prev))[1] + 1)[0];   
+    indices = (nbrs.kneighbors(np.asarray(prev).reshape(1,-1))[1] + 1)[0];   
     mink_next = np.asarray(data)[indices,:];
     mean = np.mean(mink_next, axis=0);
     return mean;
@@ -214,7 +214,7 @@ def compute_mase(double[:] data, double[:] pred, double[:] ref, int test_size):
     return (length - 1) / test_size * np.sum(np.abs(pred_np - ref_np)) / (np.sum(np.abs(data_np[1:length] - data_np[:length-1])));
 
 @cython.cdivision(True)
-def k_ball_lma(double[:] data, double[:,:] ea, int step, int test_size, int k, int theiler_window=30):
+def k_ball_lma(double[:] data, double[:,:] ea, int test_size, int k, int theiler_window=0):
 # Generate predictions starting from N+1 index in the time series 
 # until the entire length. For each prediction ea_i+1, we look at
 # k closest embedded numbers of ea_i, progress each of them to the 
